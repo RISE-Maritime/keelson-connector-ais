@@ -1,0 +1,3 @@
+pyais==2.9.2
+keelson==0.3.8
+geopy==2.4.1
