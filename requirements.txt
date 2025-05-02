@@ -1,3 +1,4 @@
 pyais==2.9.2
-keelson==0.3.8
+keelson==0.4.1
 geopy==2.4.1
+parse==1.20.2
