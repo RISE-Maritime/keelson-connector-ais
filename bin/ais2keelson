@@ -286,7 +286,8 @@ def run(session: zenoh.Session, args: argparse.Namespace):
                                 args.realm,
                                 args.entity_id,
                                 subject,
-                                f"{args.source_id}/{mmsi}",
+                                f"{args.source_id}",
+                                target_id=f"mmsi_{mmsi}",
                             )
                             pub = PUBLISHERS[subject] = session.declare_publisher(key)
 
