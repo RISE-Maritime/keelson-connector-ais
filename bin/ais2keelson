@@ -278,20 +278,22 @@ def run(session: zenoh.Session, args: argparse.Namespace):
 
                 pub.put(enclose_from_bytes(msg.to_json().encode(), timestamp=timestamp))
 
-                if args.publish_fields and (handler := HANDLERS.get(msg.msg_type)):
-                    for subject, envelope in handler(msg, timestamp=timestamp):
-                        # See if we have a publisher for this subject already, otherwise create it
-                        if not (pub := PUBLISHERS.get(subject)):
-                            key = construct_pubsub_key(
-                                args.realm,
-                                args.entity_id,
-                                subject,
-                                f"{args.source_id}",
-                                target_id=f"mmsi_{mmsi}",
-                            )
-                            pub = PUBLISHERS[subject] = session.declare_publisher(key)
+            if args.publish_fields and (handler := HANDLERS.get(msg.msg_type)):
+                logger.debug("Publishing fields!")
+                target_id = f"mmsi_{mmsi}"
+                for subject, envelope in handler(msg, timestamp=timestamp):
 
-                        pub.put(envelope)
+                    key = construct_pubsub_key(
+                        args.realm,
+                        args.entity_id,
+                        subject,
+                        f"{args.source_id}",
+                        target_id=target_id,
+                    )
+                    logger.debug(
+                        "Publishing subject: %s for target_id: %s", subject, target_id
+                    )
+                    session.put(key, envelope)
 
     # Start a background thread for dispatching NMEA messages
     t = threading.Thread(target=_dispatcher, daemon=True)
