@@ -225,7 +225,7 @@ def _handle_AIS_message_123(
     yield "heading_true_north_deg", enclose_from_float(msg.heading, timestamp=timestamp)
     yield "course_over_ground_deg", enclose_from_float(msg.course, timestamp=timestamp)
     yield "speed_over_ground_knots", enclose_from_float(msg.speed, timestamp=timestamp)
-    yield "vessel_mmsi", enclose_from_integer(msg.mmsi, timestamp=timestamp)
+    yield "vessel_mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
 
 
 def _handle_AIS_message_5(msg: MessageType5, timestamp: int = None):
@@ -246,7 +246,7 @@ def _handle_AIS_message_18(msg: MessageType18, timestamp: int = None):
     yield "heading_true_north_deg", enclose_from_float(msg.heading, timestamp=timestamp)
     yield "course_over_ground_deg", enclose_from_float(msg.course, timestamp=timestamp)
     yield "speed_over_ground_knots", enclose_from_float(msg.speed, timestamp=timestamp)
-    yield "vessel_mmsi", enclose_from_integer(msg.mmsi, timestamp=timestamp)
+    yield "vessel_mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
 
 
 HANDLERS = {
