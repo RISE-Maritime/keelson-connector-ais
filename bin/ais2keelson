@@ -56,7 +56,7 @@ def ignore(*exception):
     try:
         yield
     except exception as e:
-        logger.exception("Something went wrong in the listener!", exc_info=e)
+        logger.exception("Something went wrong in the dispatcher!", exc_info=e)
 
 
 # Config getter and setter
@@ -80,7 +80,6 @@ def set_config(config: dict):
 
 
 class Configurable:
-
     def __init__(
         self,
         session: zenoh.Session,
@@ -249,24 +248,21 @@ HANDLERS = {
 
 
 def run(session: zenoh.Session, args: argparse.Namespace):
-    # Optionally create a publisher for raw payloads
-
     def _dispatcher():
         logger.debug("Dispatcher thread started!")
 
-        with ignore(Exception):
+        # Wrap the queue in a generator so that we can...
+        def _message_generator():
+            while True:
+                try:
+                    logger.debug("Waiting for new message from Queue...")
+                    yield QUEUE.get().decode()
+                except Exception:
+                    logger.exception("Failed to decode AIS Sentence!")
 
-            # Wrap the queue in a generator so that we can...
-            def _message_generator():
-                while True:
-                    try:
-                        logger.debug("Waiting for new message from Queue...")
-                        yield QUEUE.get().decode()
-                    except Exception:
-                        logger.exception("Failed to decode AIS Sentence!")
-
-            # ...use the built-in filtering functions of pyais
-            for msg in GRID_FILTER.filter(_message_generator()):
+        # ...use the built-in filtering functions of pyais
+        for msg in GRID_FILTER.filter(_message_generator()):
+            with ignore(Exception):
                 logger.debug("Got new msg: %s", msg)
                 timestamp = time.time_ns()
 
@@ -296,7 +292,6 @@ def run(session: zenoh.Session, args: argparse.Namespace):
                     logger.debug("Publishing fields!")
                     target_id = f"mmsi_{mmsi}"
                     for subject, envelope in handler(msg, timestamp=timestamp):
-
                         key = construct_pubsub_key(
                             args.realm,
                             args.entity_id,
@@ -311,11 +306,12 @@ def run(session: zenoh.Session, args: argparse.Namespace):
                         )
                         session.put(key, envelope)
 
-        # Start a background thread for dispatching NMEA messages
-        t = threading.Thread(target=_dispatcher, daemon=True)
-        t.start()
+    # Start a background thread for dispatching NMEA messages
+    t = threading.Thread(target=_dispatcher, daemon=True)
+    t.start()
 
-        # Continuously read from STDIN
+    # Continuously read from STDIN
+    try:
         for line in sys.stdin.buffer:
             logger.debug("Read from stdin: %s", line)
 
@@ -339,6 +335,14 @@ def run(session: zenoh.Session, args: argparse.Namespace):
             if args.publish_json or args.publish_fields:
                 logger.debug("Adding to NMEA queue")
                 QUEUE.put_line(line)
+
+    except KeyboardInterrupt:
+        logger.info("Closing down...")
+        logger.debug("Waiting for all items in queue to be processed...")
+        while not QUEUE.empty():
+            time.sleep(0.1)
+
+        logger.debug("Good bye!")
 
 
 # Entrypoint
@@ -396,7 +400,6 @@ def main():
     # Construct session and run
     logger.info("Opening Zenoh session...")
     with zenoh.open(conf) as session:
-
         configurable = Configurable(
             session, args.realm, args.entity_id, args.source_id, get_config, set_config
         )
