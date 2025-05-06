@@ -5,13 +5,7 @@ Multiple co-hosted connectors towards ais data flows:
 * `ais2keelson` - reads binary AIS messages encoded in NMEA0183 sentences from STDIN and puts to zenoh
 * `digitraffic2keelson` - reads JSON encoded AIS from the digitraffic mqtt websocket api and puts to zenoh
 
-
-
-Packaged as a docker container available as:
-```
-
-```
-NOTE: This container has the [porla](https://github.com/RISE-Maritime/porla) as its base container and thus also includes all the binaries provided by porla.
+Packaged as a docker container available from: https://github.com/RISE-Maritime/keelson-connector-ais/pkgs/container/keelson-connector-ais. NOTE: This container has [porla](https://github.com/RISE-Maritime/porla) as its base container and thus also includes all the binaries provided by porla.
 
 ## Usage
 
