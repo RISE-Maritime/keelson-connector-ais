@@ -2,7 +2,7 @@
 import json
 import time
 import logging
-from typing import Callable
+from typing import Callable, Sequence
 
 import zenoh
 
@@ -13,6 +13,8 @@ from keelson.payloads.Primitives_pb2 import (
     TimestampedFloat,
     TimestampedString,
 )
+import skarv
+import keelson
 from keelson.payloads.Primitives_pb2 import TimestampedString
 from keelson.payloads.foxglove.LocationFix_pb2 import LocationFix
 from keelson.interfaces.Configurable_pb2 import ConfigurableSuccessResponse
@@ -128,3 +130,33 @@ def enclose_from_lon_lat(
     payload.longitude = longitude
 
     return enclose(payload.SerializeToString())
+
+
+def get_first(items: Sequence):
+    """
+    Returns the first item in a list or None if the list is empty.
+    """
+    return next(iter(items), None)
+
+
+def unpack(sample: skarv.Sample):
+    """
+    Unpacks a skarv sample into a keelson message.
+    """
+    subject = sample.key_expr
+    _, _, payload = keelson.uncover(sample.payload.to_bytes())
+    return keelson.decode_protobuf_payload_from_type_name(
+        payload, keelson.get_subject_schema(subject)
+    )
+
+
+def mirror(zenoh_session: zenoh.Session, zenoh_key: str, skarv_key: str):
+    # Subscribe to the key expression and put the received value into skarv
+    zenoh_session.declare_subscriber(
+        zenoh_key, lambda sample: skarv.put(skarv_key, sample.payload)
+    )
+
+    # If the key expression already has a value, we fetch it and put it into skarv
+    for response in zenoh_session.get(zenoh_key):
+        if response := response.ok and not skarv.get(skarv_key):
+            skarv.put(skarv_key, response.payload)

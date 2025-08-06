@@ -5,19 +5,18 @@ Command line utility tool for outputting AIS encoded messages to stdout
 from data received on a Zenoh session adhearing to the keelson protocol.
 """
 import sys
-import math
 import time
 import json
 import logging
 import argparse
-import threading
-from typing import Union
-from contextlib import contextmanager
+
 
 import zenoh
 import skarv
-import keelson
 import skarv.utilities
+import keelson
+
+from pyais import encode_dict
 
 from utils import *
 
@@ -31,42 +30,109 @@ SUBJECTS = [
     "course_over_ground_deg",
     "speed_over_ground_knots",
     "vessel_mmsi_number",
-
     # Message 5
     "draught_mean_m",
     "length_over_all_m",
     "breadth_over_all_m",
     "vessel_name",
     "vessel_call_sign",
-    "vessel_imo_number"
+    "vessel_imo_number",
 ]
 
+ARGS: argparse.Namespace = None
 
 
 @skarv.subscribe("location_fix")
 def _(sample: skarv.Sample):
-    # TODO: Fetch all necessary items from skarvs vault
-    location_fix = sample.value
-    rate_of_turn_degpm = skarv.get("rate_of_turn_degpm")
-    heading_true_north_deg = skarv.get("heading_true_north_deg")
-    course_over_ground_deg = skarv.get("course_over_ground_deg")
-    speed_over_ground_knots = skarv.get("speed_over_ground_knots")
-    vessel_mmsi_number = skarv.get("vessel_mmsi_number")
-    # TODO: Create AIS Message 1
-    # TODO: Output AIS Message 1 to stdout
+    # Extract location fix from the sample
+    location_fix = unpack(sample)
+
+    # Fetch all other values from skarvs vault
+    if not (vessel_mmsi_number := get_first(skarv.get("vessel_mmsi_number"))):
+        logger.warning("No vessel MMSI number found, skipping AIS Message 1 creation.")
+        return
+
+    rate_of_turn_degpm = get_first(skarv.get("rate_of_turn_degpm"))
+    heading_true_north_deg = get_first(skarv.get("heading_true_north_deg"))
+    course_over_ground_deg = get_first(skarv.get("course_over_ground_deg"))
+    speed_over_ground_knots = get_first(skarv.get("speed_over_ground_knots"))
+
+    # Create AIS Message 1
+    messages = encode_dict(
+        {
+            "type": 1,
+            "mmsi": unpack(vessel_mmsi_number).value,
+            "lat": location_fix.latitude,
+            "lon": location_fix.longitude,
+            "course": unpack(course_over_ground_deg).value
+            if course_over_ground_deg
+            else None,
+            "heading": unpack(heading_true_north_deg).value
+            if heading_true_north_deg
+            else None,
+            "speed": unpack(speed_over_ground_knots).value
+            if speed_over_ground_knots
+            else None,
+            "turn": unpack(rate_of_turn_degpm).value if rate_of_turn_degpm else None,
+        },
+        talker_id=ARGS.talker_id,
+        radio_channel=ARGS.radio_channel,
+    )
+
+    # Output AIS message(s) to stdout
+    for message in messages:
+        sys.stdout.write(message + "\n")
+    sys.stdout.flush()
+
 
 @skarv.utilities.call_every(300, wait_first=True)
 def _():
-    # TODO: Fetch all necessary items from skarvs vault
-    draught_mean_m = skarv.get("draught_mean_m")
-    length_over_all_m = skarv.get("length_over_all_m")
-    breadth_over_all_m = skarv.get("breadth_over_all_m")
-    vessel_name = skarv.get("vessel_name")
-    vessel_call_sign = skarv.get("vessel_call_sign")
-    vessel_imo_number = skarv.get("vessel_imo_number")
-    # TODO: Create AIS Message 5
-    # TODO: Output AIS Message 5 to stdout
-    pass
+    # Fetch the vessel MMSI number from skarv
+    # If it is not available, we cannot create AIS Message 5
+    # so we log a warning and return early.
+    if not (vessel_mmsi_number := get_first(skarv.get("vessel_mmsi_number"))):
+        logger.warning("No vessel MMSI number found, skipping AIS Message 5 creation.")
+        return
+
+    # Fetch all other values from skarvs vault
+    draught_mean_m = get_first(skarv.get("draught_mean_m"))
+    length_over_all_m = get_first(skarv.get("length_over_all_m"))
+    breadth_over_all_m = get_first(skarv.get("breadth_over_all_m"))
+    vessel_name = get_first(skarv.get("vessel_name"))
+    vessel_call_sign = get_first(skarv.get("vessel_call_sign"))
+    vessel_imo_number = get_first(skarv.get("vessel_imo_number"))
+
+    # Create AIS Message 5
+    messages = encode_dict(
+        {
+            "type": 5,
+            "mmsi": unpack(vessel_mmsi_number),
+            "draught": unpack(draught_mean_m).value if draught_mean_m else None,
+            "to_bow": unpack(length_over_all_m).value / 2
+            if length_over_all_m
+            else None,
+            "to_stern": unpack(length_over_all_m).value / 2
+            if length_over_all_m
+            else None,
+            "to_port": unpack(breadth_over_all_m).value / 2
+            if breadth_over_all_m
+            else None,
+            "to_starboard": unpack(breadth_over_all_m).value / 2
+            if breadth_over_all_m
+            else None,
+            "shipname": unpack(vessel_name).value if vessel_name else None,
+            "callsign": unpack(vessel_call_sign).value if vessel_call_sign else None,
+            "imo": unpack(vessel_imo_number).value if vessel_imo_number else None,
+        },
+        talker_id=ARGS.talker_id,
+        radio_channel=ARGS.radio_channel,
+    )
+
+    # Output AIS Message 5 to stdout
+    for message in messages:
+        sys.stdout.write(message + "\n")
+    sys.stdout.flush()
+
 
 # Entrypoint
 def main():
@@ -96,53 +162,52 @@ def main():
     parser.add_argument("-r", "--realm", type=str, required=True)
     parser.add_argument("-e", "--entity-id", type=str, required=True)
 
+    parser.add_argument("--talker-id", type=str, default="AIVDO")
+    parser.add_argument("--radio-channel", type=str, default="A")
+
     for subject in SUBJECTS:
         parser.add_argument(f"--source_id_{subject}", type=str, default="**")
 
     # Parse arguments and start doing our thing
-    args = parser.parse_args()
+    ARGS: argparse.Namespace = parser.parse_args()
 
     # Setup logger
     logging.basicConfig(
-        format="%(asctime)s %(levelname)s %(name)s %(message)s", level=args.log_level
+        format="%(asctime)s %(levelname)s %(name)s %(message)s", level=ARGS.log_level
     )
     logging.captureWarnings(True)
 
     # Put together zenoh session configuration
     conf = zenoh.Config()
 
-    if args.mode is not None:
-        conf.insert_json5("mode", json.dumps(args.mode))
-    if args.connect is not None:
-        conf.insert_json5("connect/endpoints", json.dumps(args.connect))
-
-    def _forward_zenoh_to_skarv()
+    if ARGS.mode is not None:
+        conf.insert_json5("mode", json.dumps(ARGS.mode))
+    if ARGS.connect is not None:
+        conf.insert_json5("connect/endpoints", json.dumps(ARGS.connect))
 
     # Construct session and run
     logger.info("Opening Zenoh session...")
+    zenoh.init_log_from_env_or(logging.getLevelName(ARGS.log_level))
     with zenoh.open(conf) as session:
-
-        def into_skarv(sample: zenoh.Sample):
-            subject = keelson.get_subject_from_pubsub_key(sample.key_expr)
-            _, _, payload = keelson.uncover(sample.payload)
-            proto_message = keelson.decode_protobuf_payload_from_type_name(
-                payload,
-                keelson.get_subject_schema(subject)
-                )
-            skarv.put(subject, proto_message)
-
-        # Create subscribers
+        # Mirror the subjects from Zenoh to skarv
         for subject in SUBJECTS:
-            session.declare_subscriber(
+            mirror(
+                session,
                 keelson.construct_pubsub_key(
-                    args.realm,
-                    args.entity_id,
+                    ARGS.realm,
+                    ARGS.entity_id,
                     subject,
-                    args[f"source-id_{subject}"],
+                    getattr(ARGS, f"source_id_{subject}"),
                 ),
-                into_skarv
+                subject,
             )
 
+        while True:
+            try:
+                time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt received, shutting down...")
+                break
 
 
 if __name__ == "__main__":
