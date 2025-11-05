@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Command line utility tool for processing input from stdin. Each line on the
-input stream is base64 encoded with no wrapping and ended with a newline.
+Command line utility tool for processing AIS encoded input from stdin and
+outputting on a Zenoh session adhearing to the keelson protocol.
 """
 import sys
 import math
