@@ -216,6 +216,10 @@ def main():
             "location_fix", skarv.middlewares.throttle(ARGS.msg1_max_rate)
         )
 
+    # Set up periodic message 5 sending
+    logger.info(f"Message 5 will be sent every {ARGS.msg5_period} seconds")
+    skarv.utilities.call_every(ARGS.msg5_period, wait_first=True)(send_message_5)
+
     # Construct session and run
     logger.info("Opening Zenoh session...")
     zenoh.init_log_from_env_or(logging.getLevelName(ARGS.log_level))
@@ -233,18 +237,8 @@ def main():
                 subject,
             )
 
-        # Set up periodic message 5 sending
-        last_msg5_time = time.time()
-        logger.info(f"Message 5 will be sent every {ARGS.msg5_period} seconds")
-
         while True:
             try:
-                # Check if it's time to send message 5
-                current_time = time.time()
-                if current_time - last_msg5_time >= ARGS.msg5_period:
-                    send_message_5()
-                    last_msg5_time = current_time
-
                 time.sleep(1)
             except KeyboardInterrupt:
                 logger.info("Keyboard interrupt received, shutting down...")
