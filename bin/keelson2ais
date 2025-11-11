@@ -26,7 +26,7 @@ logger = logging.getLogger("keelson2ais")
 SUBJECTS = [
     # Message 1
     "location_fix",
-    "rate_of_turn_degpm",  # Custom subject for AIS (not a well-known subject)
+    "yaw_rate_degps",
     "heading_true_north_deg",
     "course_over_ground_deg",
     "speed_over_ground_knots",
@@ -55,12 +55,13 @@ def _():
         logger.warning("No MMSI number found, skipping AIS Message 1 creation.")
         return
 
-    rate_of_turn_degpm = skarv.get("rate_of_turn_degpm")
+    yaw_rate_degps = skarv.get("yaw_rate_degps")
     heading_true_north_deg = skarv.get("heading_true_north_deg")
     course_over_ground_deg = skarv.get("course_over_ground_deg")
     speed_over_ground_knots = skarv.get("speed_over_ground_knots")
 
     # Create AIS Message 1
+    # Note: AIS uses degrees per minute, but keelson uses degrees per second
     messages = encode_dict(
         {
             "type": 1,
@@ -76,7 +77,7 @@ def _():
             "speed": unpack(speed_over_ground_knots).value
             if speed_over_ground_knots
             else None,
-            "turn": unpack(rate_of_turn_degpm).value if rate_of_turn_degpm else None,
+            "turn": unpack(yaw_rate_degps).value * 60 if yaw_rate_degps else None,  # Convert deg/s to deg/min
         },
         talker_id=ARGS.talker_id,
         radio_channel=ARGS.radio_channel,

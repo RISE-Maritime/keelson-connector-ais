@@ -73,7 +73,8 @@ def _handle_location_message(mmsi: int, msg: LocationMessage, timestamp: int = N
     yield "location_fix", enclose_from_lon_lat(
         msg["lon"], msg["lat"], timestamp=timestamp
     )
-    yield "rate_of_turn_degpm", enclose_from_float(msg["rot"], timestamp=timestamp)  # Custom subject for AIS
+    # AIS provides rate of turn in degrees per minute, convert to degrees per second for keelson
+    yield "yaw_rate_degps", enclose_from_float(msg["rot"] / 60.0, timestamp=timestamp)
     yield "heading_true_north_deg", enclose_from_float(
         msg["heading"], timestamp=timestamp
     )

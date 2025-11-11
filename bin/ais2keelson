@@ -100,7 +100,8 @@ def _handle_AIS_message_123(
     msg: Union[MessageType1, MessageType2, MessageType3], timestamp: int = None
 ):
     yield "location_fix", enclose_from_lon_lat(msg.lon, msg.lat, timestamp=timestamp)
-    yield "rate_of_turn_degpm", enclose_from_float(msg.turn, timestamp=timestamp)  # Custom subject for AIS
+    # AIS provides rate of turn in degrees per minute, convert to degrees per second for keelson
+    yield "yaw_rate_degps", enclose_from_float(msg.turn / 60.0, timestamp=timestamp)
     yield "heading_true_north_deg", enclose_from_float(msg.heading, timestamp=timestamp)
     yield "course_over_ground_deg", enclose_from_float(msg.course, timestamp=timestamp)
     yield "speed_over_ground_knots", enclose_from_float(msg.speed, timestamp=timestamp)
