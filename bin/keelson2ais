@@ -77,7 +77,9 @@ def _():
             "speed": unpack(speed_over_ground_knots).value
             if speed_over_ground_knots
             else None,
-            "turn": unpack(yaw_rate_degps).value * 60 if yaw_rate_degps else None,  # Convert deg/s to deg/min
+            "turn": unpack(yaw_rate_degps).value * 60
+            if yaw_rate_degps
+            else None,  # Convert deg/s to deg/min
         },
         talker_id=ARGS.talker_id,
         radio_channel=ARGS.radio_channel,
