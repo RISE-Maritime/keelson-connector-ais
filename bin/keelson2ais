@@ -14,6 +14,7 @@ import argparse
 import zenoh
 import skarv
 import skarv.utilities
+import skarv.middlewares
 from skarv.utilities.zenoh import mirror
 import keelson
 
@@ -68,18 +69,20 @@ def _():
             "mmsi": unpack(mmsi_sample).value,
             "lat": location_fix.latitude,
             "lon": location_fix.longitude,
-            "course": unpack(course_over_ground_deg).value
-            if course_over_ground_deg
-            else None,
-            "heading": unpack(heading_true_north_deg).value
-            if heading_true_north_deg
-            else None,
-            "speed": unpack(speed_over_ground_knots).value
-            if speed_over_ground_knots
-            else None,
-            "turn": unpack(yaw_rate_degps).value * 60
-            if yaw_rate_degps
-            else None,  # Convert deg/s to deg/min
+            "course": (
+                unpack(course_over_ground_deg).value if course_over_ground_deg else None
+            ),
+            "heading": (
+                unpack(heading_true_north_deg).value if heading_true_north_deg else None
+            ),
+            "speed": (
+                unpack(speed_over_ground_knots).value
+                if speed_over_ground_knots
+                else None
+            ),
+            "turn": (
+                unpack(yaw_rate_degps).value * 60 if yaw_rate_degps else None
+            ),  # Convert deg/s to deg/min
         },
         talker_id=ARGS.talker_id,
         radio_channel=ARGS.radio_channel,
@@ -91,8 +94,7 @@ def _():
     sys.stdout.flush()
 
 
-@skarv.utilities.call_every(300, wait_first=True)
-def _():
+def send_message_5():
     # Fetch the MMSI number from skarv
     # If it is not available, we cannot create AIS Message 5
     # so we log a warning and return early.
@@ -114,18 +116,18 @@ def _():
             "type": 5,
             "mmsi": unpack(mmsi_sample).value,
             "draught": unpack(draught_mean_m).value if draught_mean_m else None,
-            "to_bow": unpack(length_over_all_m).value / 2
-            if length_over_all_m
-            else None,
-            "to_stern": unpack(length_over_all_m).value / 2
-            if length_over_all_m
-            else None,
-            "to_port": unpack(breadth_over_all_m).value / 2
-            if breadth_over_all_m
-            else None,
-            "to_starboard": unpack(breadth_over_all_m).value / 2
-            if breadth_over_all_m
-            else None,
+            "to_bow": (
+                unpack(length_over_all_m).value / 2 if length_over_all_m else None
+            ),
+            "to_stern": (
+                unpack(length_over_all_m).value / 2 if length_over_all_m else None
+            ),
+            "to_port": (
+                unpack(breadth_over_all_m).value / 2 if breadth_over_all_m else None
+            ),
+            "to_starboard": (
+                unpack(breadth_over_all_m).value / 2 if breadth_over_all_m else None
+            ),
             "shipname": unpack(name).value if name else None,
             "callsign": unpack(call_sign).value if call_sign else None,
             "imo": unpack(imo_number).value if imo_number else None,
@@ -171,6 +173,20 @@ def main():
     parser.add_argument("--talker-id", type=str, default="AIVDO")
     parser.add_argument("--radio-channel", type=str, default="A")
 
+    parser.add_argument(
+        "--msg1-max-rate",
+        type=float,
+        default=None,
+        help="Maximum output rate for AIS Message 1 in seconds (e.g., 1.0 for at most once per second). If not specified, no throttling is applied.",
+    )
+
+    parser.add_argument(
+        "--msg5-period",
+        type=float,
+        default=300,
+        help="Periodic interval for AIS Message 5 in seconds.",
+    )
+
     for subject in SUBJECTS:
         parser.add_argument(f"--source_id_{subject}", type=str, default="**")
 
@@ -191,6 +207,15 @@ def main():
     if ARGS.connect is not None:
         conf.insert_json5("connect/endpoints", json.dumps(ARGS.connect))
 
+    # Register middleware for message 1 throttling if configured
+    if ARGS.msg1_max_rate is not None:
+        logger.info(
+            f"Registering throttle middleware for message 1 with rate: {ARGS.msg1_max_rate}s"
+        )
+        skarv.register_middleware(
+            "location_fix", skarv.middlewares.throttle(ARGS.msg1_max_rate)
+        )
+
     # Construct session and run
     logger.info("Opening Zenoh session...")
     zenoh.init_log_from_env_or(logging.getLevelName(ARGS.log_level))
@@ -208,8 +233,18 @@ def main():
                 subject,
             )
 
+        # Set up periodic message 5 sending
+        last_msg5_time = time.time()
+        logger.info(f"Message 5 will be sent every {ARGS.msg5_period} seconds")
+
         while True:
             try:
+                # Check if it's time to send message 5
+                current_time = time.time()
+                if current_time - last_msg5_time >= ARGS.msg5_period:
+                    send_message_5()
+                    last_msg5_time = current_time
+
                 time.sleep(1)
             except KeyboardInterrupt:
                 logger.info("Keyboard interrupt received, shutting down...")
