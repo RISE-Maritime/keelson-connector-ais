@@ -100,11 +100,12 @@ def _handle_AIS_message_123(
     msg: Union[MessageType1, MessageType2, MessageType3], timestamp: int = None
 ):
     yield "location_fix", enclose_from_lon_lat(msg.lon, msg.lat, timestamp=timestamp)
-    yield "rate_of_turn_degpm", enclose_from_float(msg.turn, timestamp=timestamp)
+    # AIS provides rate of turn in degrees per minute, convert to degrees per second for keelson
+    yield "yaw_rate_degps", enclose_from_float(msg.turn / 60.0, timestamp=timestamp)
     yield "heading_true_north_deg", enclose_from_float(msg.heading, timestamp=timestamp)
     yield "course_over_ground_deg", enclose_from_float(msg.course, timestamp=timestamp)
     yield "speed_over_ground_knots", enclose_from_float(msg.speed, timestamp=timestamp)
-    yield "vessel_mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
+    yield "mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
 
 
 def _handle_AIS_message_5(msg: MessageType5, timestamp: int = None):
@@ -115,9 +116,9 @@ def _handle_AIS_message_5(msg: MessageType5, timestamp: int = None):
     yield "breadth_over_all_m", enclose_from_float(
         msg.to_port + msg.to_starboard, timestamp=timestamp
     )
-    yield "vessel_name", enclose_from_string(msg.shipname, timestamp=timestamp)
-    yield "vessel_call_sign", enclose_from_string(msg.callsign, timestamp=timestamp)
-    yield "vessel_imo_number", enclose_from_integer(msg.imo, timestamp=timestamp)
+    yield "name", enclose_from_string(msg.shipname, timestamp=timestamp)
+    yield "call_sign", enclose_from_string(msg.callsign, timestamp=timestamp)
+    yield "imo_number", enclose_from_integer(msg.imo, timestamp=timestamp)
 
 
 def _handle_AIS_message_18(msg: MessageType18, timestamp: int = None):
@@ -125,7 +126,7 @@ def _handle_AIS_message_18(msg: MessageType18, timestamp: int = None):
     yield "heading_true_north_deg", enclose_from_float(msg.heading, timestamp=timestamp)
     yield "course_over_ground_deg", enclose_from_float(msg.course, timestamp=timestamp)
     yield "speed_over_ground_knots", enclose_from_float(msg.speed, timestamp=timestamp)
-    yield "vessel_mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
+    yield "mmsi_number", enclose_from_integer(msg.mmsi, timestamp=timestamp)
 
 
 HANDLERS = {
